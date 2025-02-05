@@ -13,8 +13,9 @@ import com.qualcomm.robotcore.hardware.Servo;
  * - Pivot Control (Light Movement on Gamepad1 Left Bumper)
  * - Claw/Arm/Wrist/Rotate Servos with automated sequences:
  *     1) Grabbing (Right Trigger on Gamepad2)
- *     2) Scoring (Left Bumper on Gamepad2)
- *        * Scoring sequence only works if the pivot is already up.
+ *     2) Wall Scoring (Left Bumper on Gamepad2) - Moves servos to wall positions,
+ *        closes claw, then moves the servos to scoring positions and commands the slide to extend.
+ *        This sequence only works if the pivot is already up.
  * - Preset Positions:
  *     - Wall: Right Bumper on Gamepad2
  *         * When activated, the pivot is commanded to go up (if not already)
@@ -24,7 +25,6 @@ import com.qualcomm.robotcore.hardware.Servo;
  *   * Only active when the pivot is fully down and the slide is not retracting.
  * - Claw Open Control:
  *     * Claw opens when left trigger on Gamepad2 is pressed.
- * - Scoring Sequence will not work when the pivot is down.
  * - State Management
  */
 @TeleOp(name="Teleop", group="Teleop")
@@ -49,15 +49,18 @@ public class Teleop extends OpMode {
     private static final double CLAW_CLOSED    = 0.29;
     private static final double ARM_READY      = 0.45;
     private static final double ARM_DOWN       = 0.37;
-    private static final double ARM_SCORE      = 0.42;
-    private static final double ARM_WALL       = 0.95;
+    private static final double ARM_SCORE      = 0.42;  // Scoring position for arm
+    private static final double ARM_WALL       = 0.95;  // Wall position for arm
+    private static final double ARM_PRE        = 0.98;
     private static final double WRIST_READY    = 0.94;
     private static final double WRIST_DOWN     = 0.90;
-    private static final double WRIST_SCORE    = 0.94;
-    private static final double WRIST_WALL     = 0.85;
+    private static final double WRIST_SCORE    = 0.94;  // Scoring position for wrist
+    private static final double WRIST_WALL     = 0.85;  // Wall position for wrist
+    private static final double WRIST_PRE      = 0.75;
     private static final double ROTATE_READY   = 0.22;
-    private static final double ROTATE_SCORE   = 0.78;
-    private static final double ROTATE_WALL    = 0.22;
+    private static final double ROTATE_SCORE   = 0.78;  // Scoring position for rotate
+    private static final double ROTATE_WALL    = 0.78;  // Wall position for rotate
+    private static final double ROTATE_PRE     = 0.78;  // .78 IS FLIPPED
 
     // Slide Positions
     private static final int SLIDE1_SCORING_POSITION = 2200;
@@ -97,7 +100,8 @@ public class Teleop extends OpMode {
     // State Enums
     // -----------------------
     private enum GrabState { IDLE, INIT, MOVE_ARM_AND_CLAW, RETURN_TO_READY }
-    private enum ScoreState { IDLE, INIT, CLOSE_CLAW, MOVE_ARM, ROTATE_SERVO, LIFT_WRIST, MOVE_TO_SCORE }
+    // Updated ScoreState for wall scoring sequence:
+    private enum ScoreState { IDLE, INIT_WALL, WAIT_FOR_SERVOS, CLOSE_CLAW, WAIT_FOR_CLAW, MOVE_TO_SCORE }
     private enum PivotState { IDLE, MOVING_UP, MOVING_DOWN }
 
     // -----------------------
@@ -150,8 +154,8 @@ public class Teleop extends OpMode {
         rotate = hardwareMap.get(Servo.class, "rotate");
         wrist  = hardwareMap.get(Servo.class, "wrist");
 
-        // Set Initial Servo Positions
-//        setServoPositions(ARM_READY, CLAW_OPEN, WRIST_READY, ROTATE_READY);
+        // Optionally, set initial servo positions here if desired.
+        // setServoPositions(ARM_READY, CLAW_OPEN, WRIST_READY, ROTATE_READY);
 
         telemetry.addData("Status", "Initialized");
         telemetry.update();
@@ -195,10 +199,10 @@ public class Teleop extends OpMode {
         handlePivotControl();
         updateSlideRetraction();
 
-        // Check for wall sequence delay (80ms) before starting pivot up.
+        // Check for wall sequence delay (if triggered via the preset wall sequence)
         if (wallSequenceInProgress) {
             long now = System.currentTimeMillis();
-            if (now - wallSequenceStartTime >= 1000) {
+            if (now - wallSequenceStartTime >= 200) {
                 if (!isPivotUp()) {
                     startPivotUp();
                 }
@@ -332,13 +336,13 @@ public class Teleop extends OpMode {
     /**
      * Sets the robot to the Wall Position.
      * - Sets servos for wall.
-     * - Delays the pivot up command by 80ms.
+     * - Delays the pivot up command by 1000ms.
      * - Retracts slide1 (intakes it) to its starting position.
      * - Marks the retraction flag so manual slide control is disabled.
      */
     private void setWallPosition() {
-        // Set servos immediately.
-        setServoPositions(ARM_WALL, CLAW_CLOSED, WRIST_WALL, ROTATE_WALL);
+        // Set servos immediately. (Using pre positions here; these may be adjusted as needed.)
+        setServoPositions(ARM_PRE, CLAW_OPEN, WRIST_PRE, ROTATE_PRE);
         // Record time and mark that the wall sequence is in progress.
         wallSequenceStartTime = System.currentTimeMillis();
         wallSequenceInProgress = true;
@@ -406,8 +410,14 @@ public class Teleop extends OpMode {
     }
 
     // -----------------------
-    // Scoring Sequenceu
+    // Wall Scoring Sequence
     // -----------------------
+    /**
+     * This method initiates the wall scoring sequence when Gamepad2 left bumper is pressed.
+     * The sequence moves the servos to wall positions, closes the claw, then after a short delay
+     * moves the servos to the scoring positions and commands the slide to extend.
+     * The sequence will only run if the pivot is already up.
+     */
     private void handleScoringSequence() {
         // Only allow scoring if the pivot is up.
         if (!isPivotUp()) {
@@ -417,7 +427,7 @@ public class Teleop extends OpMode {
         boolean currentLeftBumperPressed = gamepad2.left_bumper;
         if (currentLeftBumperPressed && !previousGamepad2LeftBumper &&
                 scoreState == ScoreState.IDLE && grabState == GrabState.IDLE) {
-            scoreState = ScoreState.INIT;
+            scoreState = ScoreState.INIT_WALL; // Start the new wall scoring sequence.
             actionStartTime = System.currentTimeMillis();
         }
         previousGamepad2LeftBumper = currentLeftBumperPressed;
@@ -428,50 +438,60 @@ public class Teleop extends OpMode {
         if (scoreState == ScoreState.IDLE) return;
         long now = System.currentTimeMillis();
         switch (scoreState) {
-            case INIT:
-                claw.setPosition(CLAW_CLOSED);
-                scoreState = ScoreState.CLOSE_CLAW;
+            case INIT_WALL:
+                // Set servos to wall positions.
+                arm.setPosition(ARM_WALL);
+                rotate.setPosition(ROTATE_WALL);
+                wrist.setPosition(WRIST_WALL);
+                telemetry.addData("Scoring Sequence", "Moving servos to wall positions");
+                telemetry.update();
                 actionStartTime = now;
+                scoreState = ScoreState.WAIT_FOR_SERVOS;
+                break;
+            case WAIT_FOR_SERVOS:
+                // Wait 100 ms for the servos to move.
+                if (now - actionStartTime >= 100) {
+                    scoreState = ScoreState.CLOSE_CLAW;
+                    actionStartTime = now;
+                }
                 break;
             case CLOSE_CLAW:
+                // Now close the claw.
+                claw.setPosition(CLAW_CLOSED);
+                telemetry.addData("Scoring Sequence", "Claw closing");
+                telemetry.update();
+                scoreState = ScoreState.WAIT_FOR_CLAW;
+                actionStartTime = now;
+                break;
+            case WAIT_FOR_CLAW:
+                // Wait another 100 ms for the claw to finish moving.
                 if (now - actionStartTime >= 100) {
+                    // Now command the servos to move to their scoring positions.
                     arm.setPosition(ARM_SCORE);
-                    scoreState = ScoreState.MOVE_ARM;
-                    actionStartTime = now;
-                }
-                break;
-            case MOVE_ARM:
-                if (now - actionStartTime >= 150) {
-                    rotate.setPosition(ROTATE_READY);
-                    scoreState = ScoreState.ROTATE_SERVO;
-                    actionStartTime = now;
-                }
-                break;
-            case ROTATE_SERVO:
-                if (now - actionStartTime >= 50) {
                     wrist.setPosition(WRIST_SCORE);
-                    scoreState = ScoreState.LIFT_WRIST;
-                    actionStartTime = now;
-                }
-                break;
-            case LIFT_WRIST:
-                if (now - actionStartTime >= 50) {
-                    // Only proceed if the pivot is already up.
+                    rotate.setPosition(ROTATE_SCORE);
+                    telemetry.addData("Scoring Sequence", "Servos moving to scoring positions");
+                    telemetry.update();
+
+                    // Ensure that the pivot is up before moving the slide.
                     if (isPivotUp()) {
                         slide1.setTargetPosition(SLIDE1_SCORING_POSITION);
                         slide1.setMode(DcMotor.RunMode.RUN_TO_POSITION);
                         slide1.setPower(1);
                         slide1.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+                        telemetry.addData("Scoring Sequence", "Slide moving to scoring position");
+                        telemetry.update();
                         scoreState = ScoreState.MOVE_TO_SCORE;
                         actionStartTime = now;
                     } else {
                         scoreState = ScoreState.IDLE;
-                        telemetry.addData("Scoring", "Pivot not up; aborting scoring sequence");
+                        telemetry.addData("Scoring", "Pivot not up; aborting wall scoring sequence");
                         telemetry.update();
                     }
                 }
                 break;
             case MOVE_TO_SCORE:
+                // Wait until the slide has reached its target (or timeout occurs).
                 if (!slide1.isBusy() || (now - actionStartTime) > MOVE_TO_SCORE_TIMEOUT) {
                     finalizeScoringSequence();
                 }
@@ -502,7 +522,7 @@ public class Teleop extends OpMode {
         long now = System.currentTimeMillis();
         switch (pivotState) {
             case MOVING_UP:
-                if (now - actionStartTime >= 1500) {
+                if (now - actionStartTime >= 1300) {
                     pivot.setPower(0.0);
                     pivotState = PivotState.IDLE;
                     telemetry.addData("Pivot", "Moved up and now holding");
