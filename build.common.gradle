@@ -18,6 +18,7 @@
 import java.util.regex.Pattern
 
 apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
 
 android {
 
@@ -106,6 +107,10 @@ android {
         targetCompatibility JavaVersion.VERSION_1_8
     }
 
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
+
     packagingOptions {
         pickFirst '**/*.so'
     }
@@ -115,4 +120,3 @@ android {
 repositories {
     mavenCentral()
 }
-
