@@ -46,9 +46,9 @@ public class Teleop extends OpMode {
 
     // Servo Positions
     private static final double CLAW_OPEN      = 0.5;
-    private static final double CLAW_CLOSED    = 0.29;
-    private static final double ARM_READY      = 0.45;
-    private static final double ARM_DOWN       = 0.37;
+    private static final double CLAW_CLOSED    = 0.27;
+    private static final double ARM_READY      = 0.43;
+    private static final double ARM_DOWN       = 0.35;
     private static final double ARM_SCORE      = 0.42;  // Scoring position for arm
     private static final double ARM_WALL       = 0.95;  // Wall position for arm
     private static final double ARM_PRE        = 0.98;
@@ -57,7 +57,7 @@ public class Teleop extends OpMode {
     private static final double WRIST_SCORE    = 0.94;  // Scoring position for wrist
     private static final double WRIST_WALL     = 0.85;  // Wall position for wrist
     private static final double WRIST_PRE      = 0.75;
-    private static final double ROTATE_READY   = 0.22;
+    private static final double ROTATE_READY   = 0.78;
     private static final double ROTATE_SCORE   = 0.78;  // Scoring position for rotate
     private static final double ROTATE_WALL    = 0.78;  // Wall position for rotate
     private static final double ROTATE_PRE     = 0.78;  // .78 IS FLIPPED
