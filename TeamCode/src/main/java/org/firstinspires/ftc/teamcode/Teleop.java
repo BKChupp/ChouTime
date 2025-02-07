@@ -63,8 +63,8 @@ public class Teleop extends OpMode {
     private static final double ROTATE_PRE     = 0.78;  // .78 IS FLIPPED
 
     // Slide Positions
-    private static final int SLIDE1_SCORING_POSITION = 2200;
-    private static final int SLIDE_MAX_POSITION       = 1400;
+    private static final int SLIDE1_SCORING_POSITION = 1450;
+    private static final int SLIDE_MAX_POSITION       = 1100;
     private static final int SLIDE_INITIAL_POSITION   = 0;  // Starting (retracted) position
 
     // Pivot Control
